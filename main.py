@@ -36,6 +36,7 @@ class MainFrame(wx.Frame):
         self.selectedTextLength = 0
         self.matches = []  # 存储所有匹配项的位置
         self.current_match_index = -1  # 当前选中的匹配项索引
+        self.IsCaseSensitive = False # 区分大小写开关
         self.IsRegexSearch = False # 正则搜索开关
 
     def InitUI(self):
@@ -56,7 +57,7 @@ class MainFrame(wx.Frame):
         self.statusBar = self.CreateStatusBar()
         self.statusBar.SetFieldsCount(3)
         self.statusBar.SetStatusWidths([-1, 100, 100])
-        self.SetStatusContent()
+        self.update_status_content()
         
         # 布局
         # vbox(tc,searchbox(sbox,rbox,bbox))
@@ -95,14 +96,18 @@ class MainFrame(wx.Frame):
         self.bbox.Add(self.replaceBtn, 1, wx.ALIGN_LEFT | wx.ALL, 5)
         self.replaceAllBtn = wx.Button(self.pnl, -1, '全部')
         self.bbox.Add(self.replaceAllBtn, 1, wx.ALIGN_LEFT | wx.ALL, 5)
+        self.caseBtn = wx.Button(self.pnl, -1, 'Aa', size=(25, 25))
+        self.caseBtn.SetToolTip('区分大小写 (Alt+C)')
+        self.bbox.Add(self.caseBtn, 0, wx.ALIGN_LEFT | wx.TOP, 5)
         self.regexBtn = wx.Button(self.pnl, -1, '.*', size=(25, 25))
         self.regexBtn.SetToolTip('正则表达式 (Alt+R)')
-        self.bbox.Add(self.regexBtn, 0, wx.ALIGN_LEFT | wx.TOP, 5)
+        self.bbox.Add(self.regexBtn, 0, wx.LEFT | wx.TOP, 5)
         self.closeBtn = wx.Button(self.pnl, -1, '✘', size=(25, 25))
-        self.bbox.Add(self.closeBtn, 0, wx.ALIGN_LEFT | wx.ALL, 5)
+        self.bbox.Add(self.closeBtn, 0, wx.LEFT | wx.ALL, 5)
         
         Btns = [self.prevBtn, self.nextBtn, self.replaceBtn,
-                self.replaceAllBtn, self.regexBtn, self.closeBtn]
+                self.replaceAllBtn, self.caseBtn, self.regexBtn,
+                self.closeBtn]
         for btn in Btns:
             btn.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNFACE))
         
@@ -112,6 +117,7 @@ class MainFrame(wx.Frame):
         self.nextBtn.Bind(wx.EVT_BUTTON, self.OnNextMatch)
         self.replaceBtn.Bind(wx.EVT_BUTTON, self.OnReplace)
         self.replaceAllBtn.Bind(wx.EVT_BUTTON, self.OnReplaceAll)
+        self.caseBtn.Bind(wx.EVT_BUTTON, self.OnToggleCase)
         self.regexBtn.Bind(wx.EVT_BUTTON, self.OnToggleRegex)
         self.closeBtn.Bind(wx.EVT_BUTTON, self.OnToggleSearch)
         self.pnl.SetSizer(self.vbox)
@@ -119,6 +125,7 @@ class MainFrame(wx.Frame):
         # 快捷键绑定
         self.SetAcceleratorTable(wx.AcceleratorTable([
             (wx.ACCEL_ALT, ord('R'), self.regexBtn.GetId()),
+            (wx.ACCEL_ALT, ord('C'), self.caseBtn.GetId()),
         ]))
 
     # 菜单栏
@@ -339,10 +346,10 @@ class MainFrame(wx.Frame):
 
     def KeyMouseEvent(self, event):
         event.Skip()
-        self.SetStatusContent()
-        self.SetMenuItem()
+        self.update_status_content()
+        self.set_menu_item()
         
-    def SetMenuItem(self):
+    def set_menu_item(self):
         if self.selectedText:
             self.MenuBar.FindItemById(wx.ID_CUT).Enable(True)
             self.MenuBar.FindItemById(wx.ID_COPY).Enable(True)
@@ -352,7 +359,7 @@ class MainFrame(wx.Frame):
         
     # 获取光标位置
     # 根据换行符计算行数，显示真实行数列数
-    def GetCursorPos(self):
+    def get_cursor_pos(self):
         pos = self.tc.GetInsertionPoint()  # 获得光标索引值
         text = self.tc.GetValue()[:pos]
         line = text.count('\n') + 1  # 计算行数
@@ -365,7 +372,7 @@ class MainFrame(wx.Frame):
 
         return line, col
 
-    def GetSelectedText(self):
+    def get_selected_text(self):
         if self.tc.GetSelection() == (0, 0):
             self.selectedText = ""
             self.selectedTextLength = 0
@@ -374,9 +381,9 @@ class MainFrame(wx.Frame):
             self.selectedTextLength = len(self.selectedText)
 
     # 状态栏内容
-    def SetStatusContent(self):
-        line, col = self.GetCursorPos()
-        self.GetSelectedText()
+    def update_status_content(self):
+        line, col = self.get_cursor_pos()
+        self.get_selected_text()
         cursor_info = (f"{line}:{col}") # 行数：列数
         if self.selectedTextLength != 0:
             selected_info = f"({self.selectedTextLength})"
@@ -389,7 +396,7 @@ class MainFrame(wx.Frame):
         if self.StatusBar.IsShown():
             self.StatusBar.Hide()
         else:
-            self.SetStatusContent()
+            self.update_status_content()
             self.StatusBar.Show()
         self.Layout()
 
@@ -461,7 +468,7 @@ class MainFrame(wx.Frame):
             self.SetStatusText("", 1)
             self.tc.SelectNone()
             self.tc.SetStyle(0, len(self.tc.GetValue()), wx.TextAttr(wx.NullColour, wx.WHITE))
-        self.SetStatusContent()
+        self.update_status_content()
 
     # 跳转到上一个匹配项
     # (已修复): 输入新内容时不能正确循环滚动
@@ -515,8 +522,8 @@ class MainFrame(wx.Frame):
     # 替换
     # (已修复): 替换后固定选中第二个匹配项而不是当前匹配项
     def OnReplace(self, event):
-        replace_text = self.replaceCtrl.GetValue()
         text_to_find = self.searchCtrl.GetValue()
+        replace_text = self.replaceCtrl.GetValue()
         if self.current_match_index != -1 and self.matches:
             start, end = self.matches[self.current_match_index]
             current_text = self.tc.GetValue()[start:end]
@@ -589,14 +596,22 @@ class MainFrame(wx.Frame):
             self.searchbox.ShowItems(True)
         self.pnl.Layout()
 
+    # 切换区分大小写(待完成)
+    def OnToggleCase(self, event):
+        self.IsCaseSensitive = not self.IsCaseSensitive
+        if self.IsCaseSensitive:
+            self.caseBtn.SetBackgroundColour(BLUE)
+        else:
+            self.caseBtn.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW))
+        self.OnSearch(None)
+        
     # 切换正则搜索
     def OnToggleRegex(self, event):
-        if self.regexBtn.GetBackgroundColour() == BLUE:
-            self.regexBtn.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW))
-            self.IsRegexSearch = False
-        else:
+        self.IsRegexSearch = not self.IsRegexSearch
+        if self.IsRegexSearch:
             self.regexBtn.SetBackgroundColour(BLUE)
-            self.IsRegexSearch = True
+        else:
+            self.regexBtn.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW))
         self.OnSearch(None)
 
 
