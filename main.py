@@ -1,11 +1,3 @@
-'''
-TODO:
-    查找 正则搜索 替换 (√)
-    显示行号 ( )
-    Ctrl+ZYACVX (√)
-    右键菜单(字体，查找) ( )
-'''
-
 import wx
 import wx.richtext
 import re # 名余曰Regex兮，字余曰灵均
