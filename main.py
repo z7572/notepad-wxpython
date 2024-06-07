@@ -444,15 +444,16 @@ class MainFrame(wx.Frame):
         text_to_find = self.searchCtrl.GetValue()
         self.clear_highlight()
         if text_to_find:
+            flags = 0 if self.IsCaseSensitive else re.IGNORECASE
             if self.IsRegexSearch:
                 try:
-                    self.matches = [match.span() for match in re.finditer(text_to_find, self.tc.GetValue())]
+                    self.matches = [match.span() for match in re.finditer(text_to_find, self.tc.GetValue(), flags)]
                 except re.error:
                     self.matches = []
                     self.SetStatusText("正则表达式无效", 1)
                     return
             else:
-                self.matches = [match.span() for match in re.finditer(re.escape(text_to_find), self.tc.GetValue())]
+                self.matches = [match.span() for match in re.finditer(re.escape(text_to_find), self.tc.GetValue(), flags)]
 
             num_matches = len(self.matches)
             
@@ -480,8 +481,9 @@ class MainFrame(wx.Frame):
     # 跳转到上一个匹配项
     # (已修复): 输入新内容时不能正确循环滚动
     def OnPrevMatch(self, event):
+        flags = 0 if self.IsCaseSensitive else re.IGNORECASE
         try:
-            self.matches = [match.span() for match in re.finditer(self.searchCtrl.GetValue(), self.tc.GetValue())]
+            self.matches = [match.span() for match in re.finditer(self.searchCtrl.GetValue(), self.tc.GetValue(), flags)]
         except re.error:
             self.matches = []
             self.SetStatusText("正则表达式无效", 1)
@@ -496,8 +498,9 @@ class MainFrame(wx.Frame):
 
     # 跳转到下一个匹配项
     def OnNextMatch(self, event):
+        flags = 0 if self.IsCaseSensitive else re.IGNORECASE
         try:
-            self.matches = [match.span() for match in re.finditer(self.searchCtrl.GetValue(), self.tc.GetValue())]
+            self.matches = [match.span() for match in re.finditer(self.searchCtrl.GetValue(), self.tc.GetValue(), flags)]
         except re.error:
             self.matches = []
             self.SetStatusText("正则表达式无效", 1)
@@ -535,8 +538,9 @@ class MainFrame(wx.Frame):
             start, end = self.matches[self.current_match_index]
             current_text = self.tc.GetValue()[start:end]
             if self.IsRegexSearch:
+                flags = 0 if self.IsCaseSensitive else re.IGNORECASE
                 try:
-                    new_text = re.sub(text_to_find, replace_text, current_text)
+                    new_text = re.sub(text_to_find, replace_text, current_text, flags=flags)
                 except re.error:
                     self.SetStatusText("正则表达式无效", 1)
                     return
@@ -559,8 +563,9 @@ class MainFrame(wx.Frame):
         if text_to_find:
             current_pos = self.tc.GetInsertionPoint()
             if self.IsRegexSearch:
+                flags = 0 if self.IsCaseSensitive else re.IGNORECASE
                 try:
-                    new_value = re.sub(text_to_find, replace_text, self.tc.GetValue())
+                    new_value = re.sub(text_to_find, replace_text, self.tc.GetValue(), flags=flags)
                 except re.error:
                     self.SetStatusText("正则表达式无效", 1)
                     return
