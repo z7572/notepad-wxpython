@@ -24,6 +24,7 @@ class MainFrame(wx.Frame):
         self.defaultFont = wx.Font(12, wx.DEFAULT, wx.NORMAL, wx.NORMAL, False, "宋体")
         self.tc.SetFont(self.defaultFont)
         self.fontColor = None
+        self.autowraplength = 400 # 过长文本自动开启自动换行
         self.selectedText = ""
         self.selectedTextLength = 0
         self.matches = []  # 存储所有匹配项的位置
@@ -49,7 +50,7 @@ class MainFrame(wx.Frame):
         self.statusBar = self.CreateStatusBar()
         self.statusBar.SetFieldsCount(3)
         self.statusBar.SetStatusWidths([-1, 100, 100])
-        self.update_status_content()
+        self.set_status_content()
         
         # 布局
         # vbox(tc,searchbox(sbox,rbox,bbox))
@@ -307,6 +308,18 @@ class MainFrame(wx.Frame):
             self.IsEdited = False
         dlg.Destroy()
         self.SetTitle(self.path + " - 记事本")
+        
+        # 过长文本自动开启自动换行
+        if self.tc.GetWindowStyleFlag() & wx.TE_DONTWRAP:
+            for line in range(1,self.tc.GetValue().count('\n') + 2):
+                length = self.tc.GetLineLength(line - 1)
+                print(line,length)
+                if length >= self.autowraplength:
+                    self.OnWrap(event)
+                    dlg = wx.MessageDialog(self, f'第{line}行文本过长({length})，已自动开启自动换行！\n\n ', '提示')
+                    dlg.ShowModal()
+                    break
+            
 
     def OnSave(self, event):
         if self.path == "无标题":
@@ -338,7 +351,7 @@ class MainFrame(wx.Frame):
 
     def KeyMouseEvent(self, event):
         event.Skip()
-        self.update_status_content()
+        self.set_status_content()
         self.set_menu_item()
         
     def set_menu_item(self):
@@ -373,7 +386,7 @@ class MainFrame(wx.Frame):
             self.selectedTextLength = len(self.selectedText)
 
     # 状态栏内容
-    def update_status_content(self):
+    def set_status_content(self):
         line, col = self.get_cursor_pos()
         self.get_selected_text()
         cursor_info = (f"{line}:{col}") # 行数：列数
@@ -388,7 +401,7 @@ class MainFrame(wx.Frame):
         if self.StatusBar.IsShown():
             self.StatusBar.Hide()
         else:
-            self.update_status_content()
+            self.set_status_content()
             self.StatusBar.Show()
         self.Layout()
 
@@ -400,8 +413,10 @@ class MainFrame(wx.Frame):
         current_style = self.tc.GetWindowStyleFlag()
         if current_style & wx.TE_DONTWRAP:
             new_style = current_style & ~wx.TE_DONTWRAP # 移除 TE_DONTWRAP 样式来启用自动换行
+            self.wrapItem.Check(True)
         else:
             new_style = current_style | wx.TE_DONTWRAP # 添加 TE_DONTWRAP 样式来禁用自动换行
+            self.wrapItem.Check(False)
         self.tc.Destroy()
         
         self.tc= wx.TextCtrl(self.pnl, -1, '', style=new_style)
@@ -460,7 +475,7 @@ class MainFrame(wx.Frame):
             self.SetStatusText("", 1)
             self.tc.SelectNone()
             self.tc.SetStyle(0, len(self.tc.GetValue()), wx.TextAttr(wx.NullColour, wx.WHITE))
-        self.update_status_content()
+        self.set_status_content()
 
     # 跳转到上一个匹配项
     # (已修复): 输入新内容时不能正确循环滚动
