@@ -248,12 +248,18 @@ class MainFrame(wx.Frame):
         self.menuBar.FindItemById(wx.ID_PASTE).Enable(True)
     def OnGoto(self,event):
         nowline = self.get_cursor_pos()[0]
-        dlg = GotoDialog(self, nowline)
+        lines = len(self.tc.GetValue().split('\n'))
+        dlg = GotoDialog(self, lines, nowline)
         if dlg.ShowModal() == wx.ID_OK:
-            line_number = dlg.GetLineNumber()
-            print(line_number)
-            self.GoToLine(line_number)
-        dlg.Destroy()
+            line_to_go = dlg.GetValue()
+            pos = 0
+            for i in range(line_to_go - 1):
+                pos += len(lines[i]) + 1  # 加1是因为包括换行符
+
+            self.tc.SetInsertionPoint(pos)
+            self.tc.ShowPosition(pos)
+            self.tc.SetFocus()
+            dlg.Destroy()
     
     # 放大
     def OnZoomIn(self, event):
@@ -397,6 +403,9 @@ class MainFrame(wx.Frame):
     # 获取光标位置
     # 根据换行符计算行数，显示真实行数列数
     def get_cursor_pos(self):
+        '''
+        Return (line, col) tuple of cursor position.
+        '''
         pos = self.tc.GetInsertionPoint()  # 获得光标索引值
         text = self.tc.GetValue()[:pos]
         line = text.count('\n') + 1  # 计算行数
@@ -511,7 +520,6 @@ class MainFrame(wx.Frame):
         self.set_status_content()
 
     # 跳转到上一个匹配项
-    # (已修复): 输入新内容时不能正确循环滚动
     def OnPrevMatch(self, event):
         flags = 0 if self.IsCaseSensitive else re.IGNORECASE
         try:
@@ -552,7 +560,11 @@ class MainFrame(wx.Frame):
     # 选中当前匹配项
     def select_current_match(self):
         if self.current_match_index != -1:
-            start, end = self.matches[self.current_match_index]
+            try:
+                start, end = self.matches[self.current_match_index]
+            except IndexError: # 最后一个匹配项消失时前移一位
+                self.current_match_index -= 1
+                start, end = self.matches[self.current_match_index]
             self.tc.SetSelection(start, end)
             self.tc.SetStyle(start, end, wx.TextAttr(wx.NullColour, BLUE))
             self.tc.ShowPosition(start)
@@ -562,7 +574,6 @@ class MainFrame(wx.Frame):
         self.tc.SetStyle(0, len(self.tc.GetValue()), wx.TextAttr(wx.NullColour, wx.WHITE))
 
     # 替换
-    # (已修复): 替换后固定选中第二个匹配项而不是当前匹配项
     def OnReplace(self, event):
         text_to_find = self.searchCtrl.GetValue()
         replace_text = self.replaceCtrl.GetValue()
@@ -570,6 +581,7 @@ class MainFrame(wx.Frame):
             start, end = self.matches[self.current_match_index]
             current_text = self.tc.GetValue()[start:end]
             if self.IsRegexSearch:
+                replace_text = self.fix_regex_capture_group(replace_text)
                 flags = 0 if self.IsCaseSensitive else re.IGNORECASE
                 try:
                     new_text = re.sub(text_to_find, replace_text, current_text, flags=flags)
@@ -595,6 +607,7 @@ class MainFrame(wx.Frame):
         if text_to_find:
             current_pos = self.tc.GetInsertionPoint()
             if self.IsRegexSearch:
+                replace_text = self.fix_regex_capture_group(replace_text)
                 flags = 0 if self.IsCaseSensitive else re.IGNORECASE
                 try:
                     new_value = re.sub(text_to_find, replace_text, self.tc.GetValue(), flags=flags)
@@ -606,6 +619,13 @@ class MainFrame(wx.Frame):
             self.tc.SetValue(new_value)
             self.tc.SetInsertionPoint(current_pos)
             self.OnSearch(None)  
+
+    # 正则引用捕获组修复(对查找无效)
+    def fix_regex_capture_group(self, text_to_find):
+        r'''\number -> \g<number>'''
+        result =  re.sub(r'\\(\d)', r'\\g<\1>', text_to_find)
+        print(f"{text_to_find} -> {result}")
+        return result
               
     # 切换搜索
     def OnToggleSearch(self, event):
@@ -661,16 +681,15 @@ class MainFrame(wx.Frame):
 
 
 class GotoDialog(wx.Dialog):
-    def __init__(self, parent, nowline):
+    def __init__(self, parent, lines, nowline):
         wx.Dialog.__init__(self, None, -1, "转到", size=(250, 150))
         self.nowline = nowline
+        self.lines = lines
         self.InitUI()
-        self.SetSizeHints(250, 150, 250, 150)
-        self.Centre()
 
     def InitUI(self):
         vbox = wx.BoxSizer(wx.VERTICAL)
-        st_line = wx.StaticText(self, label="行号：")
+        st_line = wx.StaticText(self, label=f"行号：(1..{self.lines})")
         vbox.Add(st_line, flag=wx.ALL | wx.ALIGN_LEFT, border=10)
         self.line_input = wx.TextCtrl(self, -1, str(self.nowline), style=wx.TE_PROCESS_ENTER)
         vbox.Add(self.line_input, flag=wx.EXPAND | wx.LEFT | wx.RIGHT, border=10)
@@ -684,20 +703,26 @@ class GotoDialog(wx.Dialog):
 
         btn_ok.Bind(wx.EVT_BUTTON, self.OnOK)
         btn_cancel.Bind(wx.EVT_BUTTON, self.OnCancel)
+        self.line_input.Bind(wx.EVT_TEXT_ENTER, self.OnOK)
+
+    def GetValue(self):
+        return int(self.line_input.GetValue())
 
     def OnOK(self, event):
-        line_no = self.line_input.GetValue()
-        if line_no.isdigit():
-            self.EndModal(wx.ID_OK)
+        line_num = self.line_input.GetValue()
+        if line_num.isdigit():
+            line_to_go = int(line_num)
+            if line_to_go > 0 and line_to_go <= self.lines:
+                self.EndModal(wx.ID_OK)
+            else:
+                wx.MessageBox("请输入有效的行号", "错误", wx.OK | wx.ICON_ERROR)
         else:
             wx.MessageBox("请输入有效的行号", "错误", wx.OK | wx.ICON_ERROR)
 
     def OnCancel(self, event):
         self.EndModal(wx.ID_CANCEL)
+    ReturnCode = wx.ID_CANCEL
     
-    def GetLineNumber(self):
-        return int(self.line_input.GetValue())
-
 
 
 class AboutDialog(wx.Dialog):
