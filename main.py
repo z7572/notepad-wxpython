@@ -1,5 +1,4 @@
 import wx
-import wx.richtext
 import re # 名余曰Regex兮，字余曰灵均
 import os.path
 import webbrowser
@@ -35,7 +34,7 @@ class MainFrame(wx.Frame):
     def InitUI(self):
 
         self.tc = wx.TextCtrl(self.pnl, -1 , '',
-            style=wx.TE_DONTWRAP | wx.TE_MULTILINE | wx.TE_RICH)
+            style=wx.TE_DONTWRAP | wx.TE_MULTILINE | wx.TE_RICH2)
 
         self.tc.Bind(wx.EVT_TEXT, self.OnEdited)
         self.tc.Bind(wx.EVT_KEY_UP, self.KeyMouseEvent)
@@ -46,6 +45,8 @@ class MainFrame(wx.Frame):
         
         # 菜单栏
         self.makeMenuBar()
+        # 右键菜单
+        self.tc.Bind(wx.EVT_RIGHT_DOWN, self.OnShowContextMenu)
         
         self.statusBar = self.CreateStatusBar()
         self.statusBar.SetFieldsCount(3)
@@ -145,22 +146,24 @@ class MainFrame(wx.Frame):
         undoItem = editMenu.Append(wx.ID_UNDO, '撤销(&U)\tCtrl+Z')
         redoItem = editMenu.Append(wx.ID_REDO, '重做(&R)\tCtrl+Y')
         editMenu.AppendSeparator()
-        selectallItem = editMenu.Append(wx.ID_SELECTALL, '全选(&A)\tCtrl+A')
+        cutItem = editMenu.Append(wx.ID_CUT, '剪切(&T)\tCtrl+X')
         copyItem = editMenu.Append(wx.ID_COPY, '复制(&C)\tCtrl+C')
         pasteItem = editMenu.Append(wx.ID_PASTE, '粘贴(&P)\tCtrl+V')
-        cutItem = editMenu.Append(wx.ID_CUT, '剪切(&T)\tCtrl+X')
+        deleteItem = editMenu.Append(wx.ID_DELETE, '删除(&L)\tDel')
+        selectallItem = editMenu.Append(wx.ID_SELECTALL, '全选(&A)\tCtrl+A')
         editMenu.AppendSeparator()
         searchItem = editMenu.Append(-1, '查找(&F)\tCtrl+F')
         replaceItem = editMenu.Append(-1, '替换(&R)\tCtrl+H')
         gotoItem = editMenu.Append(-1, '转到(&G)\tCtrl+G')
         
-        pasteItem.Enable(False) # 禁用粘贴菜单项
-        cutItem.Enable(False) # 禁用剪切菜单项
-        copyItem.Enable(False) # 禁用复制菜单项
+        pasteItem.Enable(False)
+        cutItem.Enable(False)
+        copyItem.Enable(False)
         
         self.Bind(wx.EVT_MENU, self.OnUndo, undoItem)
         self.Bind(wx.EVT_MENU, self.OnRedo, redoItem)
         self.Bind(wx.EVT_MENU, self.OnSelectAll, selectallItem)
+        self.Bind(wx.EVT_MENU, self.OnDelete, deleteItem)
         self.Bind(wx.EVT_MENU, self.OnCopy, copyItem, id=wx.ID_COPY)
         self.Bind(wx.EVT_MENU, self.OnPaste, pasteItem)
         self.Bind(wx.EVT_MENU, self.OnCut, cutItem, id)
@@ -202,6 +205,28 @@ class MainFrame(wx.Frame):
         self.menuBar.Append(viewMenu, '查看(&V)')
         self.menuBar.Append(helpMenu, '帮助(&H)')
         self.SetMenuBar(self.menuBar)
+    
+    def OnShowContextMenu(self, event):
+        contextMenu = wx.Menu()
+        undoItem = contextMenu.Append(wx.ID_UNDO, "撤销(&U)")
+        redoItem = contextMenu.Append(wx.ID_REDO, "重做(&R)")
+        contextMenu.AppendSeparator()
+        cutItem = contextMenu.Append(wx.ID_CUT, "剪切(&T)")
+        copyItem = contextMenu.Append(wx.ID_COPY, "复制(&C)")
+        pasteItem = contextMenu.Append(wx.ID_PASTE, "粘贴(&V)")
+        deleteItem = contextMenu.Append(wx.ID_DELETE, "删除(&D)")
+        selectallItem = contextMenu.Append(wx.ID_SELECTALL, "全选(&A)")
+        contextMenu.AppendSeparator()
+        fontItem = contextMenu.Append(-1, "字体(&F)")
+        searchItem = contextMenu.Append(-1, "查找(&F)")
+        
+        # TE_RICH2内置撤销 重做 剪切 复制 粘贴 删除功能，故不用绑定
+        self.Bind(wx.EVT_MENU, self.OnToggleSearch, searchItem)
+        self.Bind(wx.EVT_MENU, self.OnFont, fontItem)
+        
+        self.PopupMenu(contextMenu)
+        contextMenu.Destroy()
+        
 
     # 基本文件功能
     def OnUndo(self,event):
@@ -210,6 +235,9 @@ class MainFrame(wx.Frame):
         self.tc.Redo()
     def OnSelectAll(self,event):
         self.tc.SelectAll()
+    def OnDelete(self,event):
+        start, end = self.tc.GetSelection()
+        self.tc.Remove(start, end)
     def OnCopy(self,event):
         self.tc.Copy()
         self.menuBar.FindItemById(wx.ID_PASTE).Enable(True)
@@ -218,10 +246,14 @@ class MainFrame(wx.Frame):
     def OnCut(self,event):
         self.tc.Cut()
         self.menuBar.FindItemById(wx.ID_PASTE).Enable(True)
-    def OnDelete(self,event):
-        pass
     def OnGoto(self,event):
-        pass
+        nowline = self.get_cursor_pos()[0]
+        dlg = GotoDialog(self, nowline)
+        if dlg.ShowModal() == wx.ID_OK:
+            line_number = dlg.GetLineNumber()
+            print(line_number)
+            self.GoToLine(line_number)
+        dlg.Destroy()
     
     # 放大
     def OnZoomIn(self, event):
@@ -608,7 +640,7 @@ class MainFrame(wx.Frame):
             self.searchbox.ShowItems(True)
         self.pnl.Layout()
 
-    # 切换区分大小写(待完成)
+    # 切换区分大小写
     def OnToggleCase(self, event):
         self.IsCaseSensitive = not self.IsCaseSensitive
         if self.IsCaseSensitive:
@@ -625,6 +657,46 @@ class MainFrame(wx.Frame):
         else:
             self.regexBtn.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW))
         self.OnSearch(None)
+
+
+
+class GotoDialog(wx.Dialog):
+    def __init__(self, parent, nowline):
+        wx.Dialog.__init__(self, None, -1, "转到", size=(250, 150))
+        self.nowline = nowline
+        self.InitUI()
+        self.SetSizeHints(250, 150, 250, 150)
+        self.Centre()
+
+    def InitUI(self):
+        vbox = wx.BoxSizer(wx.VERTICAL)
+        st_line = wx.StaticText(self, label="行号：")
+        vbox.Add(st_line, flag=wx.ALL | wx.ALIGN_LEFT, border=10)
+        self.line_input = wx.TextCtrl(self, -1, str(self.nowline), style=wx.TE_PROCESS_ENTER)
+        vbox.Add(self.line_input, flag=wx.EXPAND | wx.LEFT | wx.RIGHT, border=10)
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        btn_ok = wx.Button(self, label="确定")
+        btn_cancel = wx.Button(self, label="取消")
+        hbox.Add(btn_ok)
+        hbox.Add(btn_cancel, flag=wx.LEFT, border=5)
+        vbox.Add(hbox, flag=wx.ALIGN_RIGHT | wx.TOP | wx.BOTTOM | wx.RIGHT, border=10)
+        self.SetSizer(vbox)
+
+        btn_ok.Bind(wx.EVT_BUTTON, self.OnOK)
+        btn_cancel.Bind(wx.EVT_BUTTON, self.OnCancel)
+
+    def OnOK(self, event):
+        line_no = self.line_input.GetValue()
+        if line_no.isdigit():
+            self.EndModal(wx.ID_OK)
+        else:
+            wx.MessageBox("请输入有效的行号", "错误", wx.OK | wx.ICON_ERROR)
+
+    def OnCancel(self, event):
+        self.EndModal(wx.ID_CANCEL)
+    
+    def GetLineNumber(self):
+        return int(self.line_input.GetValue())
 
 
 
