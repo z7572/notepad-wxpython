@@ -29,6 +29,7 @@ class MainFrame(wx.Frame):
         self.matches = []  # 存储所有匹配项的位置
         self.current_match_index = -1  # 当前选中的匹配项索引
         self.IsCaseSensitive = False # 区分大小写开关
+        self.IsWholeWord = False # 全词匹配开关
         self.IsRegexSearch = False # 正则搜索开关
 
     def InitUI(self):
@@ -54,72 +55,85 @@ class MainFrame(wx.Frame):
         self.set_status_content()
         
         # 布局
-        # vbox(tc,searchbox(sbox,rbox,bbox))
+        # vbox(hbox(line,tc),
+        #      searchbox(sbox,rbox,bbox))
         
         self.vbox = wx.BoxSizer(wx.VERTICAL)
-        self.searchbox = wx.BoxSizer(wx.VERTICAL)
+
+        #linenumber
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.vbox.Add(self.hbox, 1, wx.EXPAND)
+        #self.hbox.Add(self.linenumber, 1, wx.EXPAND)
+        self.hbox.Add(self.tc, 20, wx.EXPAND)
         
-        sbox = wx.BoxSizer(wx.HORIZONTAL)
-        self.rbox = wx.BoxSizer(wx.HORIZONTAL)
-        self.bbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.searchbox = wx.BoxSizer(wx.VERTICAL) 
+        if "searchbox": # 手动缩进
+            self.vbox.Add(self.searchbox, 0, wx.EXPAND)
+            
+            sbox = wx.BoxSizer(wx.HORIZONTAL)
+            self.rbox = wx.BoxSizer(wx.HORIZONTAL)
+            self.bbox = wx.BoxSizer(wx.HORIZONTAL)
+            
+            self.searchbox.Add(sbox, 0, wx.EXPAND)
+            self.searchbox.Add(self.rbox, 0, wx.EXPAND)
+            self.searchbox.Add(self.bbox, 0, wx.EXPAND)
+            
+            st = wx.StaticText(self.pnl, -1, '查找')
+            sbox.Add(st, 0, wx.ALIGN_LEFT | wx.ALL, 5)
+            self.searchCtrl = wx.TextCtrl(self.pnl, -1, '', style=wx.TE_PROCESS_ENTER)
+            sbox.Add(self.searchCtrl, 1, wx.ALL, 5)
+            
+            st = wx.StaticText(self.pnl, -1, '替换')
+            self.rbox.Add(st, 0, wx.ALIGN_LEFT | wx.ALL, 5)
+            self.replaceCtrl = wx.TextCtrl(self.pnl, -1, '', style=wx.TE_PROCESS_ENTER)
+            self.rbox.Add(self.replaceCtrl, 1, wx.ALL, 5)
+            
+            self.prevBtn = wx.Button(self.pnl, -1, '上个')
+            self.nextBtn = wx.Button(self.pnl, -1, '下个')
+            self.replaceBtn = wx.Button(self.pnl, -1, '替换')
+            self.replaceAllBtn = wx.Button(self.pnl, -1, '全部')
+            self.caseBtn = wx.Button(self.pnl, -1, 'Cc', size=(25, 25))
+            self.caseBtn.SetToolTip('区分大小写 (Alt+C)')
+            self.wordBtn = wx.Button(self.pnl, -1, 'W', size=(25, 25))
+            self.wordBtn.SetToolTip('全词匹配 (Alt+W)')
+            self.regexBtn = wx.Button(self.pnl, -1, '.*', size=(25, 25))
+            self.regexBtn.SetToolTip('正则表达式 (Alt+R)')
+            self.closeBtn = wx.Button(self.pnl, -1, '✘', size=(25, 25))
+
+            self.bbox.AddMany([
+                (self.prevBtn, 1, wx.ALIGN_LEFT | wx.ALL, 5),
+                (self.nextBtn, 1, wx.ALIGN_LEFT | wx.ALL, 5),
+                (self.replaceBtn, 1, wx.ALIGN_LEFT | wx.ALL, 5),
+                (self.replaceAllBtn, 1, wx.ALIGN_LEFT | wx.ALL, 5),
+                (self.caseBtn, 0, wx.ALIGN_LEFT | wx.TOP, 5),
+                (self.wordBtn, 0, wx.LEFT | wx.TOP, 5),
+                (self.regexBtn, 0, wx.LEFT | wx.TOP, 5),
+                (self.closeBtn, 0, wx.LEFT | wx.ALL, 5)])
+            
+            Btns = [self.prevBtn, self.nextBtn, self.replaceBtn,
+                    self.replaceAllBtn, self.caseBtn, self.wordBtn,
+                    self.regexBtn, self.closeBtn]
+            for btn in Btns:
+                btn.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNFACE))
+            
+            self.searchCtrl.Bind(wx.EVT_TEXT,self.OnSearch)
+            self.searchCtrl.Bind(wx.EVT_TEXT_ENTER, self.OnSearch)
+            self.prevBtn.Bind(wx.EVT_BUTTON, self.OnPrevMatch)
+            self.nextBtn.Bind(wx.EVT_BUTTON, self.OnNextMatch)
+            self.replaceBtn.Bind(wx.EVT_BUTTON, self.OnReplace)
+            self.replaceAllBtn.Bind(wx.EVT_BUTTON, self.OnReplaceAll)
+            self.caseBtn.Bind(wx.EVT_BUTTON, self.OnToggleCase)
+            self.wordBtn.Bind(wx.EVT_BUTTON, self.OnToggleWord)
+            self.regexBtn.Bind(wx.EVT_BUTTON, self.OnToggleRegex)
+            self.closeBtn.Bind(wx.EVT_BUTTON, self.OnToggleSearch)
         
-        self.searchbox.Add(sbox, 0, wx.EXPAND)
-        self.searchbox.Add(self.rbox, 0, wx.EXPAND)
-        self.searchbox.Add(self.bbox, 0, wx.EXPAND)
-        
-        self.vbox.Add(self.tc, 1, wx.EXPAND)
-        self.vbox.Add(self.searchbox, 0, wx.EXPAND)
-        
-        st = wx.StaticText(self.pnl, -1, '查找')
-        sbox.Add(st, 0, wx.ALIGN_LEFT | wx.ALL, 5)
-        
-        self.searchCtrl = wx.TextCtrl(self.pnl, -1, '', style=wx.TE_PROCESS_ENTER)
-        sbox.Add(self.searchCtrl, 1, wx.ALL, 5)
-        
-        st = wx.StaticText(self.pnl, -1, '替换')
-        self.rbox.Add(st, 0, wx.ALIGN_LEFT | wx.ALL, 5)
-        
-        self.replaceCtrl = wx.TextCtrl(self.pnl, -1, '', style=wx.TE_PROCESS_ENTER)
-        self.rbox.Add(self.replaceCtrl, 1, wx.ALL, 5)
-        
-        self.prevBtn = wx.Button(self.pnl, -1, '上个')
-        self.bbox.Add(self.prevBtn, 1, wx.ALIGN_LEFT | wx.ALL, 5)
-        self.nextBtn = wx.Button(self.pnl, -1, '下个')
-        self.bbox.Add(self.nextBtn, 1, wx.ALIGN_LEFT | wx.ALL, 5)
-        self.replaceBtn = wx.Button(self.pnl, -1, '替换')
-        self.bbox.Add(self.replaceBtn, 1, wx.ALIGN_LEFT | wx.ALL, 5)
-        self.replaceAllBtn = wx.Button(self.pnl, -1, '全部')
-        self.bbox.Add(self.replaceAllBtn, 1, wx.ALIGN_LEFT | wx.ALL, 5)
-        self.caseBtn = wx.Button(self.pnl, -1, 'Aa', size=(25, 25))
-        self.caseBtn.SetToolTip('区分大小写 (Alt+C)')
-        self.bbox.Add(self.caseBtn, 0, wx.ALIGN_LEFT | wx.TOP, 5)
-        self.regexBtn = wx.Button(self.pnl, -1, '.*', size=(25, 25))
-        self.regexBtn.SetToolTip('正则表达式 (Alt+R)')
-        self.bbox.Add(self.regexBtn, 0, wx.LEFT | wx.TOP, 5)
-        self.closeBtn = wx.Button(self.pnl, -1, '✘', size=(25, 25))
-        self.bbox.Add(self.closeBtn, 0, wx.LEFT | wx.ALL, 5)
-        
-        Btns = [self.prevBtn, self.nextBtn, self.replaceBtn,
-                self.replaceAllBtn, self.caseBtn, self.regexBtn,
-                self.closeBtn]
-        for btn in Btns:
-            btn.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNFACE))
-        
-        self.searchCtrl.Bind(wx.EVT_TEXT,self.OnSearch)
-        self.searchCtrl.Bind(wx.EVT_TEXT_ENTER, self.OnSearch)
-        self.prevBtn.Bind(wx.EVT_BUTTON, self.OnPrevMatch)
-        self.nextBtn.Bind(wx.EVT_BUTTON, self.OnNextMatch)
-        self.replaceBtn.Bind(wx.EVT_BUTTON, self.OnReplace)
-        self.replaceAllBtn.Bind(wx.EVT_BUTTON, self.OnReplaceAll)
-        self.caseBtn.Bind(wx.EVT_BUTTON, self.OnToggleCase)
-        self.regexBtn.Bind(wx.EVT_BUTTON, self.OnToggleRegex)
-        self.closeBtn.Bind(wx.EVT_BUTTON, self.OnToggleSearch)
         self.pnl.SetSizer(self.vbox)
         
         # 快捷键绑定
         self.SetAcceleratorTable(wx.AcceleratorTable([
             (wx.ACCEL_ALT, ord('R'), self.regexBtn.GetId()),
             (wx.ACCEL_ALT, ord('C'), self.caseBtn.GetId()),
+            (wx.ACCEL_ALT, ord('W'), self.wordBtn.GetId()),
         ]))
 
     # 菜单栏
@@ -351,7 +365,6 @@ class MainFrame(wx.Frame):
         if self.tc.GetWindowStyleFlag() & wx.TE_DONTWRAP:
             for line in range(1,self.tc.GetValue().count('\n') + 2):
                 length = self.tc.GetLineLength(line - 1)
-                print(line,length)
                 if length >= self.autowraplength:
                     self.OnWrap(event)
                     dlg = wx.MessageDialog(self, f'第{line}行文本过长({length})，已自动开启自动换行！\n\n ', '提示')
@@ -485,8 +498,9 @@ class MainFrame(wx.Frame):
         text_to_find = self.searchCtrl.GetValue()
         self.clear_highlight()
         if text_to_find:
-            flags = 0 if self.IsCaseSensitive else re.IGNORECASE
+            flags = 0 if self.IsCaseSensitive else re.IGNORECASE # 区分大小写
             if self.IsRegexSearch:
+                text_to_find = r'\b' + text_to_find + r'\b' if self.IsWholeWord else text_to_find # 全词匹配
                 try:
                     self.matches = [match.span() for match in re.finditer(text_to_find, self.tc.GetValue(), flags)]
                 except re.error:
@@ -522,6 +536,7 @@ class MainFrame(wx.Frame):
     # 跳转到上一个匹配项
     def OnPrevMatch(self, event):
         flags = 0 if self.IsCaseSensitive else re.IGNORECASE
+        text_to_find = r'\b' + text_to_find + r'\b' if self.IsWholeWord else text_to_find
         try:
             self.matches = [match.span() for match in re.finditer(self.searchCtrl.GetValue(), self.tc.GetValue(), flags)]
         except re.error:
@@ -534,11 +549,11 @@ class MainFrame(wx.Frame):
             self.highlight_all_matches()
             self.select_current_match()
             self.SetStatusText(f"{self.current_match_index + 1}/{len(self.matches)}个匹配", 1)
-            self.select_current_match()
 
     # 跳转到下一个匹配项
     def OnNextMatch(self, event):
         flags = 0 if self.IsCaseSensitive else re.IGNORECASE
+        text_to_find = r'\b' + text_to_find + r'\b' if self.IsWholeWord else text_to_find
         try:
             self.matches = [match.span() for match in re.finditer(self.searchCtrl.GetValue(), self.tc.GetValue(), flags)]
         except re.error:
@@ -583,6 +598,7 @@ class MainFrame(wx.Frame):
             if self.IsRegexSearch:
                 replace_text = self.fix_regex_capture_group(replace_text)
                 flags = 0 if self.IsCaseSensitive else re.IGNORECASE
+                text_to_find = r'\b' + text_to_find + r'\b' if self.IsWholeWord else text_to_find
                 try:
                     new_text = re.sub(text_to_find, replace_text, current_text, flags=flags)
                 except re.error:
@@ -609,6 +625,7 @@ class MainFrame(wx.Frame):
             if self.IsRegexSearch:
                 replace_text = self.fix_regex_capture_group(replace_text)
                 flags = 0 if self.IsCaseSensitive else re.IGNORECASE
+                text_to_find = r'\b' + text_to_find + r'\b' if self.IsWholeWord else text_to_find
                 try:
                     new_value = re.sub(text_to_find, replace_text, self.tc.GetValue(), flags=flags)
                 except re.error:
@@ -624,7 +641,6 @@ class MainFrame(wx.Frame):
     def fix_regex_capture_group(self, text_to_find):
         r'''\number -> \g<number>'''
         result =  re.sub(r'\\(\d)', r'\\g<\1>', text_to_find)
-        print(f"{text_to_find} -> {result}")
         return result
               
     # 切换搜索
@@ -668,7 +684,16 @@ class MainFrame(wx.Frame):
         else:
             self.caseBtn.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW))
         self.OnSearch(None)
-        
+    
+    # 切换全词匹配
+    def OnToggleWord(self, event):
+        self.IsWholeWord = not self.IsWholeWord
+        if self.IsWholeWord:
+            self.wordBtn.SetBackgroundColour(BLUE)
+        else:
+            self.wordBtn.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW))
+        self.OnSearch(None)
+    
     # 切换正则搜索
     def OnToggleRegex(self, event):
         self.IsRegexSearch = not self.IsRegexSearch
@@ -721,7 +746,6 @@ class GotoDialog(wx.Dialog):
 
     def OnCancel(self, event):
         self.EndModal(wx.ID_CANCEL)
-    ReturnCode = wx.ID_CANCEL
     
 
 
