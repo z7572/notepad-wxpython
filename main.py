@@ -465,6 +465,7 @@ class MainFrame(wx.Frame):
         value = self.tc.GetValue()
         font = self.tc.GetFont()
         current_style = self.tc.GetWindowStyleFlag()
+        current_index = 0 # 防止与自动换行的文本框位置冲突
         if current_style & wx.TE_DONTWRAP:
             new_style = current_style & ~wx.TE_DONTWRAP # 移除 TE_DONTWRAP 样式来启用自动换行
             self.wrapItem.Check(True)
@@ -474,7 +475,7 @@ class MainFrame(wx.Frame):
         self.tc.Destroy()
         
         self.tc= wx.TextCtrl(self.pnl, -1, '', style=new_style)
-        self.vbox.Add(self.tc, 1, wx.EXPAND)
+        self.vbox.Insert(current_index, self.tc, 1, wx.EXPAND)
         self.pnl.SetSizer(self.vbox)
         self.tc.SetFont(font)
         self.tc.SetSize(tc_size)
@@ -643,7 +644,7 @@ class MainFrame(wx.Frame):
         result =  re.sub(r'\\(\d)', r'\\g<\1>', text_to_find)
         return result
               
-    # 切换搜索
+    # 切换查找
     def OnToggleSearch(self, event):
         if self.searchCtrl.IsShown():
             self.searchbox.ShowItems(False)
