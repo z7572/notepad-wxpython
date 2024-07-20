@@ -781,7 +781,7 @@ class AboutDialog(wx.Dialog):
     def OnIconClick(self, icon):
         def handler(event): # 所以需要闭包函数，实现函数传参
             if icon == "github":
-                webbrowser.open("https://github.com/zjx7572/notepad-wxpython")
+                webbrowser.open("https://github.com/z7572/notepad-wxpython")
             elif icon == "bilibili":
                 webbrowser.open("https://b23.tv/YbNLXsS")
             elif icon == "x":
